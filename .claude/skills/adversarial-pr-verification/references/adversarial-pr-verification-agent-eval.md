@@ -1,8 +1,8 @@
 # adversarial-pr-verification — this repository
 
-What to check, per surface, on top of `make verify` (lint, tests with the coverage floor, `docker
-compose config`, image build). Each item names the claim shape, the evidence that settles it and the
-mutation that proves a test guards it.
+What to check, per surface, on top of `make verify` (the CI gates; the `verify` target in the
+`Makefile` lists them). Each item names the claim shape, the evidence that settles it and the mutation
+that proves a test guards it. A surface whose files don't exist yet has no row to run.
 
 ## Fast-path gate list
 
