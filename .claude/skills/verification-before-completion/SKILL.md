@@ -46,6 +46,8 @@ List what changed with `git diff --name-only --no-renames origin/main...HEAD` pl
    commit message, list each material claim with what carries it: the command run at this head and its
    answer, the file you opened, or the print you looked at. A recollection is not a trace. The claims
    that fail most often feel too small to check — a count, a "nenhum uso", "não muda o relatório".
+   Every risk you would ask the auditor to probe ("must not break X"), probe yourself before the push
+   and cite the probe in the body: the auditor is a second check, not the first.
 
 5. **Report** the trace, which steps ran and which were skipped, with the reason for each skip. Say
    what ran here, not what CI will do.
