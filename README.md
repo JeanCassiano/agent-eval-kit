@@ -25,8 +25,8 @@ make lint      # style and formatting
 
 ## Writing cases
 
-Cases are YAML files; see [docs/case-format.md](docs/case-format.md) and the suites in
-[examples/cases/](examples/cases/).
+Cases are YAML files; see [docs/case-format.md](docs/case-format.md) for the format and how each checker
+decides pass or fail, and the suites in [examples/cases/](examples/cases/).
 
 ## License
 

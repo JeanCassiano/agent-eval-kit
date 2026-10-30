@@ -53,3 +53,25 @@ questions, so the reader can tell what was delegated from what was decided and v
   by running the loader on those inputs; on the first commit, six mutations of the validation rules (synthetic flag,
   duplicate ids across files, unknown fields, unknown check type, `min > max`, chained traceback) each
   turned a test red.
+
+## AE-11 — Checkers: exact, JSON fields, contained text and numeric range
+
+> Draft written by the AI. Review it, and the checkers, before closing the story: the story's last
+> criterion is that I can explain every failure reason without AI.
+
+- **Tools:** Claude Code (Claude Opus 5.5).
+- **Delegated:** all of the code, by my decision of 2026-10-30: the checkers and their registry
+  (`agent_eval_kit.checks`), the loader change that takes the check types from that registry and
+  rejects unknown options, their tests, and the "Checkers" section of `docs/case-format.md`.
+- **Decided by me:** approved the AI's plan, and settled three measurement choices it put to me:
+  `numeric_range` reads the last number in the output, `json_fields` is strict (an answer wrapped in a
+  Markdown code fence fails), and failure reasons are in English like the rest of the code.
+- **Where the AI was wrong:** on reading its own first draft, the reasons said "all 1 fields", printed
+  a 400-digit number in full and leaked Python's integer-limit message with its `sys.` hint. Option
+  validation was written twice, and the copy in `run_check` accepted `"yes"` as true. A long JSON
+  object was still printed in full after a doc sentence claimed long values were cut. Each one was
+  fixed and the last two got a test.
+- **How I validated:** `make verify`; 23 mutations of the checkers and the loader (bool vs number, both
+  range bounds, first vs last number, case folding, Unicode normalization, missing fields, code
+  fences, `NaN`, repeated JSON keys, option validation) each turned a test red; the reasons quoted in
+  `docs/case-format.md` were produced by running the checkers.

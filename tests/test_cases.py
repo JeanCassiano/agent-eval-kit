@@ -154,6 +154,13 @@ def test_suite_must_be_declared_synthetic(tmp_path, synthetic):
         ("{id: a, input: x, expected: {min: 1, max: 2, step: 1}, check: {type: numeric_range}}", "expected"),
         ("{id: a, input: x, expected: [ok, 3], check: {type: contains}}", "expected"),
         ('{id: a, input: x, expected: "", check: {type: contains}}', "expected"),
+        ("{id: a, input: x, expected: {1: ok}, check: {type: json_fields}}", "expected"),
+        ('{id: a, input: x, expected: {"a..b": ok}, check: {type: json_fields}}', "expected"),
+        ('{id: a, input: x, expected: {".a": ok}, check: {type: json_fields}}', "expected"),
+        ("{id: a, input: x, expected: x, check: {type: exact, normalise: true}}", "check.normalise"),
+        ('{id: a, input: x, expected: x, check: {type: exact, normalize: "yes"}}', "check.normalize"),
+        ("{id: a, input: x, expected: x, check: {type: contains, normalize: true}}", "check.normalize"),
+        ("{id: a, input: x, expected: {min: 1, max: 9}, check: {type: numeric_range, n: 1}}", "check.n"),
     ],
 )
 def test_invalid_case_fields(tmp_path, case, field):
@@ -175,6 +182,21 @@ def test_invalid_suite_fields(tmp_path, header, field):
     error = load_error(write(tmp_path, "toy.yaml", header))
 
     assert error.field == field
+
+
+def test_check_option_errors_say_what_is_accepted(tmp_path):
+    case = "  - {id: a, input: x, expected: x, check: {type: exact, norm: true}}\n"
+    unknown = load_error(write(tmp_path, "a.yaml", HEADER + case))
+    no_options = load_error(
+        write(
+            tmp_path,
+            "b.yaml",
+            HEADER + "  - {id: a, input: x, expected: {n: 1}, check: {type: json_fields, strict: true}}\n",
+        )
+    )
+
+    assert "accepted: normalize" in str(unknown)
+    assert "`json_fields` takes no options" in str(no_options)
 
 
 def test_valid_shapes_of_expected_per_check_type(tmp_path):
