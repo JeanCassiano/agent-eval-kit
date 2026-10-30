@@ -70,8 +70,11 @@ questions, so the reader can tell what was delegated from what was decided and v
   a 400-digit number in full and leaked Python's integer-limit message with its `sys.` hint. Option
   validation was written twice, and the copy in `run_check` accepted `"yes"` as true. A long JSON
   object was still printed in full after a doc sentence claimed long values were cut. Each one was
-  fixed and the last two got a test.
-- **How I validated:** `make verify`; 23 mutations of the checkers and the loader (bool vs number, both
+  fixed and the last two got a test. The first cold audit failed the PR on that same sentence: field
+  paths and range bounds were still printed whole (a 479-character reason). It also found two untested
+  branches, the too-many-digits JSON error and the non-string output guard. All three now have tests.
+- **How I validated:** `make verify`; 27 mutations of the checkers and the loader (bool vs number, both
   range bounds, first vs last number, case folding, Unicode normalization, missing fields, code
-  fences, `NaN`, repeated JSON keys, option validation) each turned a test red; the reasons quoted in
+  fences, `NaN`, repeated JSON keys, option validation, the output type guard, cut reasons) each
+  turned a test red; the reasons quoted in
   `docs/case-format.md` were produced by running the checkers.

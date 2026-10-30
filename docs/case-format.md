@@ -57,9 +57,9 @@ The loader checks the shape of `expected` for the declared type.
 
 `agent_eval_kit.checks.run_check(case.check, case.expected, output)` runs the checker named by
 `check.type` on the agent's text output and returns a `CheckResult` with `passed` and a `reason`. The
-reason is written for a person reading a failed run, and is set on a pass too. Each value it quotes is
-cut to 60 characters. Checkers never raise on odd output (empty, binary, deeply nested); they fail with a
-reason. Every option is a boolean flag, off by default.
+reason is written for a person reading a failed run, and is set on a pass too. Each value, field path
+and bound it quotes is cut to 60 characters. Checkers never raise on odd output (empty, binary, deeply
+nested); they fail with a reason. Every option is a boolean flag, off by default.
 
 | `check.type` | Options | Passes when |
 | --- | --- | --- |

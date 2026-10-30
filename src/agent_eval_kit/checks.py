@@ -137,7 +137,7 @@ def _json_fields(expected: Mapping[str, Any], output: str) -> CheckResult:
         if problem:
             problems.append(problem)
         elif not _same_value(want, got):
-            problems.append(f"field {path!r}: expected {_show(want)}, got {_show(got)}")
+            problems.append(f"field {_show(path)}: expected {_show(want)}, got {_show(got)}")
     if problems:
         return CheckResult(False, "; ".join(problems))
     return CheckResult(True, f"all {_count(len(expected), 'field')} match")
@@ -148,9 +148,9 @@ def _lookup(document: dict, path: str) -> tuple[Any, str | None]:
     walked: list[str] = []
     for segment in path.split("."):
         if not isinstance(node, dict):
-            return _MISSING, f"field {path!r} is missing: {'.'.join(walked)!r} is not an object"
+            return _MISSING, f"field {_show(path)} is missing: {_show('.'.join(walked))} is not an object"
         if segment not in node:
-            return _MISSING, f"field {path!r} is missing"
+            return _MISSING, f"field {_show(path)} is missing"
         node = node[segment]
         walked.append(segment)
     return node, None
@@ -202,4 +202,5 @@ def _numeric_range(expected: Mapping[str, float], output: str) -> CheckResult:
     which = f" (last of {len(found)} numbers found)" if len(found) > 1 else ""
     inside = low <= value <= high
     verdict = "within" if inside else "outside"
-    return CheckResult(inside, f"{_shorten(token)}{which} is {verdict} [{low}, {high}]")
+    bounds = f"[{_shorten(str(low))}, {_shorten(str(high))}]"
+    return CheckResult(inside, f"{_shorten(token)}{which} is {verdict} {bounds}")

@@ -118,6 +118,7 @@ def test_json_fields(expected, output, passed):
         ('{"status": "ok"', "invalid JSON"),
         ("", "invalid JSON"),
         ("[" * 100_000, "invalid JSON"),
+        pytest.param('{"status": ' + "1" * 5000 + "}", "too many digits", id="5000-digit-integer"),
     ],
 )
 def test_json_fields_rejects_what_is_not_one_json_object(output, reason_part):
@@ -143,9 +144,13 @@ def test_json_fields_reason_lists_every_failing_field():
 
 def test_reasons_cut_long_values():
     big = '{"meta": {"list": [' + ", ".join(["1"] * 500) + "]}}"
+    long_path = ".".join(["segment"] * 50)
 
     assert len(check("json_fields", {"meta": {"list": []}}, big).reason) < 200
+    assert len(check("json_fields", {long_path: 1}, "{}").reason) < 200
+    assert len(check("json_fields", {long_path: 1}, '{"segment": 1}').reason) < 200
     assert len(check("numeric_range", {"min": 0, "max": 1}, "9" * 500).reason) < 200
+    assert len(check("numeric_range", {"min": 0, "max": 10**400}, "9" * 500).reason) < 200
 
 
 @pytest.mark.parametrize(
@@ -234,15 +239,27 @@ def test_no_checker_raises_on_odd_output(check_type, output):
     assert result.reason
 
 
-def test_run_check_rejects_an_unknown_type_or_option_and_a_non_string_output():
+def test_run_check_rejects_an_unknown_type_or_option():
     with pytest.raises(ValueError, match="fuzzy"):
         check("fuzzy", "x", "x")
     with pytest.raises(ValueError, match="normalise"):
         check("exact", "x", "x", normalise=True)
     with pytest.raises(ValueError, match="true or false"):
         check("exact", "x", "x", normalize="yes")
-    with pytest.raises(TypeError):
-        check("exact", "42", 42)
+
+
+@pytest.mark.parametrize(
+    ("check_type", "expected"),
+    [
+        ("exact", "42"),
+        ("json_fields", {"n": 42}),
+        ("contains", "42"),
+        ("numeric_range", {"min": 0, "max": 50}),
+    ],
+)
+def test_run_check_rejects_a_non_string_output(check_type, expected):
+    with pytest.raises(TypeError, match="output must be a string"):
+        check(check_type, expected, 42)
 
 
 def test_example_suites_pass_with_correct_answers():
