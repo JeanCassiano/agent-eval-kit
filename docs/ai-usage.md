@@ -44,6 +44,10 @@ questions, so the reader can tell what was delegated from what was decided and v
   that the AI writes AE-9 and AE-11 too, to finish v1 faster.
 - **Where the AI was wrong:** the malformed-YAML test first expected the error on line 5; the broken
   line is line 6, which is what the loader reported. The test expectation was fixed, not the loader.
+  The first cold audit found edge cases the loader accepted or leaked: a repeated YAML key silently kept
+  the last value, an unreadable file raised a raw exception, hidden folders were scanned, and `null`
+  inputs, padded ids and NaN bounds were accepted. Each got a test that failed on the audited loader
+  before the fix.
 - **How I validated:** `make verify`; the error messages quoted in `docs/case-format.md` were produced
   by running the loader on those inputs; six mutations of the validation rules (synthetic flag,
   duplicate ids across files, unknown fields, unknown check type, `min > max`, chained traceback) each

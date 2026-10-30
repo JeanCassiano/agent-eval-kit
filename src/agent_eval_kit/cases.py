@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import math
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -57,7 +58,13 @@ def load_suites(path: str | Path) -> list[Suite]:
     """Load one suite file, or every `*.yaml`/`*.yml` under a folder, with case ids unique across all."""
     path = Path(path)
     if path.is_dir():
-        files = sorted(p for p in path.rglob("*") if p.is_file() and p.suffix in SUITE_SUFFIXES)
+        files = sorted(
+            p
+            for p in path.rglob("*")
+            if p.is_file()
+            and p.suffix.lower() in SUITE_SUFFIXES
+            and not any(part.startswith(".") for part in p.relative_to(path).parts)
+        )
         if not files:
             raise CaseFormatError(path, f"no case files ({', '.join(SUITE_SUFFIXES)}) in this folder")
     elif path.is_file():
@@ -71,9 +78,8 @@ def load_suites(path: str | Path) -> list[Suite]:
         suite = _load_file(file)
         for case in suite.cases:
             if case.id in seen:
-                raise CaseFormatError(
-                    file, f"duplicate id, already used in {seen[case.id]}", case_id=case.id, field="id"
-                )
+                where = "in this file" if seen[case.id] == file else f"already used in {seen[case.id]}"
+                raise CaseFormatError(file, f"duplicate id, {where}", case_id=case.id, field="id")
             seen[case.id] = file
         suites.append(suite)
     return suites
@@ -81,15 +87,18 @@ def load_suites(path: str | Path) -> list[Suite]:
 
 def _load_file(path: Path) -> Suite:
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml.load(path.read_text(encoding="utf-8"), Loader=_StrictLoader)
     except yaml.YAMLError as error:
         raise CaseFormatError(path, _describe_yaml_error(error)) from None
+    except (OSError, UnicodeDecodeError) as error:
+        raise CaseFormatError(path, f"cannot read the file: {error}") from None
 
     if not isinstance(data, dict):
         raise CaseFormatError(path, "a suite must be a mapping with name, version, synthetic and cases")
     for key in ("name", "version"):
-        if not isinstance(data.get(key), str | int | float) or isinstance(data.get(key), bool):
-            raise CaseFormatError(path, "required, must be a string or a number", field=key)
+        value = data.get(key)
+        if not isinstance(value, str | int | float) or isinstance(value, bool) or not str(value).strip():
+            raise CaseFormatError(path, "required, must be a non-empty string or a number", field=key)
     if data.get("synthetic") is not True:
         raise CaseFormatError(
             path, "must be `true`: suites hold synthetic data only, never real data", field="synthetic"
@@ -102,27 +111,26 @@ def _load_file(path: Path) -> Suite:
     if not isinstance(raw_cases, list) or not raw_cases:
         raise CaseFormatError(path, "required, must be a non-empty list", field="cases")
 
-    cases: list[Case] = []
-    for index, raw in enumerate(raw_cases):
-        case = _parse_case(path, index, raw)
-        if any(existing.id == case.id for existing in cases):
-            raise CaseFormatError(path, "duplicate id in this file", case_id=case.id, field="id")
-        cases.append(case)
-    return Suite(name=str(data["name"]), version=str(data["version"]), path=path, cases=tuple(cases))
+    cases = tuple(_parse_case(path, index, raw) for index, raw in enumerate(raw_cases))
+    return Suite(name=str(data["name"]), version=str(data["version"]), path=path, cases=cases)
 
 
 def _parse_case(path: Path, index: int, raw: Any) -> Case:
     if not isinstance(raw, dict):
         raise CaseFormatError(path, f"case #{index + 1} must be a mapping")
     case_id = raw.get("id")
-    if not isinstance(case_id, str) or not case_id.strip():
-        raise CaseFormatError(path, f"case #{index + 1}: required, must be a non-empty string", field="id")
+    if not isinstance(case_id, str) or not case_id.strip() or case_id != case_id.strip():
+        raise CaseFormatError(
+            path,
+            f"case #{index + 1}: required, must be a non-empty string without surrounding spaces",
+            field="id",
+        )
 
     def fail(field: str, message: str) -> CaseFormatError:
         return CaseFormatError(path, message, case_id=case_id, field=field)
 
     for key in _REQUIRED_CASE_FIELDS:
-        if key not in raw:
+        if raw.get(key) is None:
             raise fail(key, "required")
     unknown = set(raw) - set(_CASE_FIELDS)
     if unknown:
@@ -157,17 +165,39 @@ def _expected_problem(check_type: str, expected: Any) -> str | None:
         return "for `json_fields`, must be a non-empty mapping of field path to value"
     if check_type == "contains":
         parts = [expected] if isinstance(expected, str) else expected
-        if not isinstance(parts, list) or not parts or not all(isinstance(p, str) for p in parts):
-            return "for `contains`, must be a string or a non-empty list of strings"
+        if not isinstance(parts, list) or not parts or not all(isinstance(p, str) and p for p in parts):
+            return "for `contains`, must be a non-empty string or a non-empty list of non-empty strings"
     if check_type == "numeric_range":
         if not isinstance(expected, dict) or set(expected) != {"min", "max"}:
             return "for `numeric_range`, must be a mapping with `min` and `max`"
         low, high = expected["min"], expected["max"]
-        if not all(isinstance(v, int | float) and not isinstance(v, bool) for v in (low, high)):
-            return "for `numeric_range`, `min` and `max` must be numbers"
+        if not all(
+            isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v) for v in (low, high)
+        ):
+            return "for `numeric_range`, `min` and `max` must be finite numbers"
         if low > high:
             return "for `numeric_range`, `min` must not exceed `max`"
     return None
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """`SafeLoader` that rejects a key repeated in one mapping instead of keeping the last value."""
+
+
+def _construct_unique_mapping(loader: _StrictLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
+    keys = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if isinstance(key, Hashable):
+            if key in keys:
+                raise yaml.constructor.ConstructorError(
+                    problem=f"duplicate key {key!r}", problem_mark=key_node.start_mark
+                )
+            keys.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+_StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
 
 
 def _describe_yaml_error(error: yaml.YAMLError) -> str:

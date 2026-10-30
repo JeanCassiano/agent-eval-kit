@@ -77,7 +77,7 @@ def test_duplicate_id_in_one_file(tmp_path):
     error = load_error(write(tmp_path, "toy.yaml", HEADER + case + case))
 
     assert error.case_id == "greet"
-    assert "duplicate" in str(error)
+    assert "duplicate id, in this file" in str(error)
 
 
 def test_unknown_check_type_lists_accepted_types(tmp_path):
@@ -140,15 +140,98 @@ def test_suite_must_be_declared_synthetic(tmp_path, synthetic):
         ('{id: "", input: x, expected: x, check: {type: exact}}', "id"),
         ("{id: a, input: x, expected: x, check: exact}", "check"),
         ("{id: a, input: x, expected: x, check: {type: exact}, tags: smoke}", "tags"),
-        ("{id: a, input: x, expected: x, check: {type: json_fields}}", "expected"),
+        ('{id: " a", input: x, expected: x, check: {type: exact}}', "id"),
+        ("{id: 7, input: x, expected: x, check: {type: exact}}", "id"),
+        ("{id: a, input: null, expected: x, check: {type: exact}}", "input"),
+        ("{id: a, input: x, expected: x, check: {type: exact}, tags: [smoke, 1]}", "tags"),
+        ("{id: a, input: x, expected: 3, check: {type: exact}}", "expected"),
+        ("{id: a, input: x, expected: {}, check: {type: json_fields}}", "expected"),
+        ("{id: a, input: x, expected: [status], check: {type: json_fields}}", "expected"),
         ("{id: a, input: x, expected: {min: 5, max: 1}, check: {type: numeric_range}}", "expected"),
+        ("{id: a, input: x, expected: {min: true, max: 3}, check: {type: numeric_range}}", "expected"),
+        ("{id: a, input: x, expected: {min: .nan, max: 3}, check: {type: numeric_range}}", "expected"),
+        ("{id: a, input: x, expected: {min: 1}, check: {type: numeric_range}}", "expected"),
+        ("{id: a, input: x, expected: {min: 1, max: 2, step: 1}, check: {type: numeric_range}}", "expected"),
         ("{id: a, input: x, expected: [ok, 3], check: {type: contains}}", "expected"),
+        ('{id: a, input: x, expected: "", check: {type: contains}}', "expected"),
     ],
 )
 def test_invalid_case_fields(tmp_path, case, field):
     error = load_error(write(tmp_path, "toy.yaml", HEADER + f"  - {case}\n"))
 
     assert error.field == field
+
+
+@pytest.mark.parametrize(
+    ("header", "field"),
+    [
+        ('name: toy\nversion: "1"\nsynthetic: true\ncases: []\n', "cases"),
+        ("name: toy\nversion: true\nsynthetic: true\ncases: []\n", "version"),
+        ('name: ""\nversion: "1"\nsynthetic: true\ncases: []\n', "name"),
+        ('name: toy\nversion: "1"\nsynthetic: true\nowner: me\ncases: []\n', "owner"),
+    ],
+)
+def test_invalid_suite_fields(tmp_path, header, field):
+    error = load_error(write(tmp_path, "toy.yaml", header))
+
+    assert error.field == field
+
+
+def test_valid_shapes_of_expected_per_check_type(tmp_path):
+    cases = """\
+  - {id: a, input: x, expected: "Paris", check: {type: exact}}
+  - {id: b, input: x, expected: {status: ok, items.count: 3}, check: {type: json_fields}}
+  - {id: c, input: x, expected: refund, check: {type: contains}}
+  - {id: d, input: x, expected: [refund, order], check: {type: contains}}
+  - {id: e, input: x, expected: {min: 2.5, max: 2.5}, check: {type: numeric_range}}
+"""
+    [suite] = load_suites(write(tmp_path, "toy.yaml", HEADER + cases))
+
+    assert len(suite.cases) == 5
+
+
+def test_repeated_yaml_key_is_an_error_not_a_silent_overwrite(tmp_path):
+    path = write(
+        tmp_path, "toy.yaml", HEADER + "  - {id: a, id: b, input: x, expected: x, check: {type: exact}}\n"
+    )
+
+    error = load_error(path)
+
+    assert "duplicate key 'id'" in str(error)
+    assert "line 5" in str(error)
+
+
+def test_unreadable_file_is_a_format_error(tmp_path):
+    path = tmp_path / "toy.yaml"
+    path.write_bytes(b"name: \xff\xfe\n")
+
+    error = load_error(path)
+
+    assert "cannot read the file" in str(error)
+    assert error.__suppress_context__
+
+
+def test_folder_is_recursive_and_skips_hidden_paths(tmp_path):
+    (tmp_path / "nested").mkdir()
+    (tmp_path / ".hidden").mkdir()
+    write(
+        tmp_path / "nested",
+        "deep.YAML",
+        HEADER + "  - {id: deep, input: x, expected: x, check: {type: exact}}\n",
+    )
+    write(tmp_path / ".hidden", "skip.yaml", "not: a suite\n")
+    write(tmp_path, ".skip.yaml", "not: a suite\n")
+
+    [suite] = load_suites(tmp_path)
+
+    assert [case.id for case in suite.cases] == ["deep"]
+
+
+def test_check_params_are_read_only(tmp_path):
+    [suite] = load_suites(write(tmp_path, "toy.yaml", THREE_CASES))
+
+    with pytest.raises(TypeError):
+        suite.cases[0].check.params["normalize"] = False
 
 
 def test_empty_folder_is_an_error(tmp_path):
