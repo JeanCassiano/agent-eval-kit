@@ -251,3 +251,30 @@ def test_examples_load_and_use_three_check_types():
 
     assert len(suites) == 3
     assert len({case.check.type for suite in suites for case in suite.cases}) == 3
+
+
+def test_anchors_and_merge_keys_still_load(tmp_path):
+    cases = """\
+  - &base {id: a, input: &prompt "Say hi", expected: "hi", check: {type: exact}}
+  - {<<: *base, id: b, expected: "hello"}
+  - {<<: [*base], id: c, input: *prompt}
+"""
+    [suite] = load_suites(write(tmp_path, "toy.yaml", HEADER + cases))
+
+    assert [(case.id, case.input, case.expected) for case in suite.cases] == [
+        ("a", "Say hi", "hi"),
+        ("b", "Say hi", "hello"),
+        ("c", "Say hi", "hi"),
+    ]
+
+
+def test_unhashable_yaml_key_is_a_format_error(tmp_path):
+    path = write(
+        tmp_path,
+        "toy.yaml",
+        HEADER + "  - {id: a, input: {? [x, y] : 1}, expected: x, check: {type: exact}}\n",
+    )
+
+    error = load_error(path)
+
+    assert "unhashable key" in str(error)

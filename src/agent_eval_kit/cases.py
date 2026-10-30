@@ -181,12 +181,21 @@ def _expected_problem(check_type: str, expected: Any) -> str | None:
 
 
 class _StrictLoader(yaml.SafeLoader):
-    """`SafeLoader` that rejects a key repeated in one mapping instead of keeping the last value."""
+    """`SafeLoader` that rejects a key repeated in one mapping instead of keeping the last value.
+
+    Merge keys (`<<`) are left to `construct_mapping`, which resolves them: keys they bring in may be
+    overridden by the mapping's own keys, as YAML allows.
+    """
+
+
+_MERGE_TAG = "tag:yaml.org,2002:merge"
 
 
 def _construct_unique_mapping(loader: _StrictLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
     keys = set()
     for key_node, _ in node.value:
+        if key_node.tag == _MERGE_TAG:
+            continue
         key = loader.construct_object(key_node, deep=deep)
         if isinstance(key, Hashable):
             if key in keys:

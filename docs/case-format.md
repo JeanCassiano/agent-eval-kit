@@ -34,6 +34,8 @@ cases:
 
 Any other suite or case field is rejected, so a typo like `expect:` fails loudly instead of being
 ignored. A key repeated in the same mapping is rejected too, instead of the last value silently winning.
+Anchors, aliases and merge keys (`<<: *base`) work as in any YAML file, and a key brought in by a merge
+may be overridden by the mapping's own key.
 Options inside `check` are not validated by the loader.
 
 YAML reads some unquoted words as booleans (`yes`, `no`, `on`, `off`) and some numbers differently than
@@ -70,8 +72,7 @@ cannot be read (no permission, not UTF-8) is a `CaseFormatError` too.
 - **YAML, not Python.** Reviewing a case should not require reading code, and a diff of a YAML suite
   reads like a diff of test data.
 - **`expected` and `check` are separate.** `expected` is the reference answer and `check` says how to
-  compare against it. The same reference can be checked strictly (`exact`) or loosely (`contains`), and
-  a simulated agent can build a passing answer from `expected` alone.
+  compare against it. The same reference can be checked strictly (`exact`) or loosely (`contains`).
 - **`synthetic: true` is mandatory.** The project only uses synthetic data. Making every suite declare
   it turns that rule into a check the loader enforces instead of a convention.
 - **Ids are unique across files.** Run results are meant to be keyed by case id and compared case by
