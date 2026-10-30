@@ -168,6 +168,9 @@ def test_pass_reasons_count_in_the_singular():
         (["refund", "#A-1001"], "Refund for #A-1001 issued.", {"ignore_case": True}, True),
         (["STRASSE"], "straße", {"ignore_case": True}, True),
         (["refund", "order"], "refund", {}, False),
+        ("Refund", "refund", {}, False),
+        ("refund", "REFUND", {}, False),
+        ("abc", "cab", {}, False),
     ],
 )
 def test_contains(expected, output, params, passed):
@@ -211,6 +214,8 @@ def test_numeric_range_uses_the_last_number(output, passed):
         ("1,000", 1000),
         ("about 1,234,567 units", 1234567),
         ("+3", 3),
+        ("18kg", 18),
+        ("1e3", 1),
     ],
 )
 def test_numeric_range_reads_signs_decimals_and_thousands(output, value):
@@ -243,8 +248,9 @@ def test_numeric_range_reason_names_the_number_and_the_range():
     assert "last of 2 numbers" in result.reason
 
 
-def test_numeric_range_ignores_digits_glued_to_a_word():
+def test_numeric_range_ignores_digits_glued_to_a_word_or_a_dot():
     assert check("numeric_range", {"min": 0, "max": 100}, "version v2 of A1001").reason == "no number found"
+    assert check("numeric_range", {"min": 1.2, "max": 1.2}, "release 1.2.3").passed is True
 
 
 @pytest.mark.parametrize("check_type", CHECK_TYPES)

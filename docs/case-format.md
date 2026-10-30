@@ -66,7 +66,7 @@ flag, off by default.
 | `check.type` | Options | Passes when |
 | --- | --- | --- |
 | `exact` | `normalize` | the output equals `expected`. Without `normalize` the comparison is strict, so a trailing newline fails. With it, both sides are Unicode-normalized (NFC), trimmed, their inner whitespace collapsed to one space and case folded, so `" PARIS\n"` matches `"Paris"`. Punctuation still counts. |
-| `json_fields` | none | the whole output is one JSON object (surrounding whitespace allowed) and every listed field has the expected value. Other fields are ignored. |
+| `json_fields` | none | the whole output is one JSON object (surrounding spaces, tabs and newlines allowed) and every listed field has the expected value. Other fields are ignored. |
 | `contains` | `ignore_case` | every expected piece appears in the output. |
 | `numeric_range` | none | the **last** number in the output is within `[min, max]`, both ends included. |
 
@@ -79,11 +79,16 @@ Rules a reader might otherwise relax:
   Nested objects and lists in `expected` must match exactly, not as a subset. A path cannot index into a
   list (`items.0` is not supported), and a key that itself contains a dot cannot be reached.
 - **`numeric_range` reads the last number** because it is usually the conclusion when the agent shows its
-  work: `"12.50 + 2.25 + 3.25 = 18"` reads as 18. A number glued to a word or a dot is skipped (`v2`,
-  `A1001`), and so is a minus sign after a word: `"order A-15"` reads as 15, not -15. Commas only group
-  thousands (`1,000`). The number and the bounds are compared exactly, as decimals, so
-  `20.000000000000000001` is outside `[10, 20]` and `0.1` is inside `[0.1, 0.2]`. Known limits: a decimal comma (`18,50`) reads as two numbers, a malformed group
-  such as `1,0000` reads as 1000, and scientific notation (`1e3`) is not recognized.
+  work: `"12.50 + 2.25 + 3.25 = 18"` reads as 18. A number right after a letter, an underscore or a dot
+  is skipped (`v2`, `A1001`, the `.3` of `1.2.3`), and so is a minus sign right after a letter:
+  `"order A-15"` reads as 15, not -15. A number followed by letters still counts: `18kg` reads as 18.
+  Commas only group thousands (`1,000`).
+- **The output's number is read exactly, as a decimal**, so `20.000000000000000001` is outside
+  `[10, 20]`. The bounds are YAML numbers: an integer is exact, and a bound written with up to 15
+  significant digits is compared as written, so `0.1` is inside `[0.1, 0.2]`. A longer decimal bound is
+  rounded by the YAML reader to the nearest float.
+- **Known limits of `numeric_range`:** a decimal comma (`18,50`) reads as two numbers, a malformed group
+  such as `1,0000` reads as 1000, and scientific notation is not understood (`1e3` reads as 1).
 
 Examples of reasons, as returned by the checkers:
 
