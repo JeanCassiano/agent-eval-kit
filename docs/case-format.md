@@ -57,9 +57,11 @@ The loader checks the shape of `expected` for the declared type.
 
 `agent_eval_kit.checks.run_check(case.check, case.expected, output)` runs the checker named by
 `check.type` on the agent's text output and returns a `CheckResult` with `passed` and a `reason`. The
-reason is written for a person reading a failed run, and is set on a pass too. Each value, field path
-and bound it quotes is cut to 60 characters. Checkers never raise on odd output (empty, binary, deeply
-nested); they fail with a reason. Every option is a boolean flag, off by default.
+reason is written for a person reading a failed run, and is set on a pass too. Anything it quotes from
+the output or from `expected` is cut to 60 characters. Checkers never raise on odd text (empty, binary,
+deeply nested); they fail with a reason. `run_check` raises only for a call that no loaded suite can
+make, such as an output that is not a string or an unknown type or option. Every option is a boolean
+flag, off by default.
 
 | `check.type` | Options | Passes when |
 | --- | --- | --- |
@@ -79,8 +81,9 @@ Rules a reader might otherwise relax:
 - **`numeric_range` reads the last number** because it is usually the conclusion when the agent shows its
   work: `"12.50 + 2.25 + 3.25 = 18"` reads as 18. A number glued to a word or a dot is skipped (`v2`,
   `A1001`), and so is a minus sign after a word: `"order A-15"` reads as 15, not -15. Commas only group
-  thousands (`1,000`). Known limits: a decimal comma (`18,50`) reads as two numbers, and scientific
-  notation (`1e3`) is not recognized.
+  thousands (`1,000`). The number and the bounds are compared exactly, as decimals, so
+  `20.000000000000000001` is outside `[10, 20]` and `0.1` is inside `[0.1, 0.2]`. Known limits: a decimal comma (`18,50`) reads as two numbers, a malformed group
+  such as `1,0000` reads as 1000, and scientific notation (`1e3`) is not recognized.
 
 Examples of reasons, as returned by the checkers:
 

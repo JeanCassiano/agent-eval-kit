@@ -73,8 +73,12 @@ questions, so the reader can tell what was delegated from what was decided and v
   fixed and the last two got a test. The first cold audit failed the PR on that same sentence: field
   paths and range bounds were still printed whole (a 479-character reason). It also found two untested
   branches, the too-many-digits JSON error and the non-string output guard. All three now have tests.
-- **How I validated:** `make verify`; 27 mutations of the checkers and the loader (bool vs number, both
+  The second audit failed it again on the same sentence, for the repeated-key reason, which the fix had
+  missed because only the reported sites were patched; every quoting site was then swept. It also
+  found that `numeric_range` compared through floats, so `20.000000000000000001` passed `[10, 20]`;
+  it now compares exact decimals.
+- **How I validated:** `make verify`; 31 mutations of the checkers and the loader (bool vs number, both
   range bounds, first vs last number, case folding, Unicode normalization, missing fields, code
-  fences, `NaN`, repeated JSON keys, option validation, the output type guard, cut reasons) each
+  fences, `NaN`, repeated JSON keys, option validation, the output type guard, cut reasons, exact decimals) each
   turned a test red; the reasons quoted in
   `docs/case-format.md` were produced by running the checkers.

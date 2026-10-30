@@ -7,6 +7,7 @@ import re
 import unicodedata
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -78,7 +79,7 @@ def _count(n: int, noun: str) -> str:
 
 
 def _normalize(text: str) -> str:
-    return unicodedata.normalize("NFC", unicodedata.normalize("NFC", " ".join(text.split())).casefold())
+    return unicodedata.normalize("NFC", " ".join(text.split()).casefold())
 
 
 @_register("exact", "normalize")
@@ -106,7 +107,7 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     document = {}
     for key, value in pairs:
         if key in document:
-            raise _StrictJSONError(f"duplicate key {key!r}")
+            raise _StrictJSONError(f"duplicate key {_show(key)}")
         document[key] = value
     return document
 
@@ -198,9 +199,9 @@ def _numeric_range(expected: Mapping[str, float], output: str) -> CheckResult:
     if not found:
         return CheckResult(False, "no number found")
     token = found[-1]
-    value = float(token.replace(",", ""))
+    value = Decimal(token.replace(",", ""))
     which = f" (last of {len(found)} numbers found)" if len(found) > 1 else ""
-    inside = low <= value <= high
+    inside = Decimal(str(low)) <= value <= Decimal(str(high))
     verdict = "within" if inside else "outside"
     bounds = f"[{_shorten(str(low))}, {_shorten(str(high))}]"
     return CheckResult(inside, f"{_shorten(token)}{which} is {verdict} {bounds}")

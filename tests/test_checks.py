@@ -151,6 +151,13 @@ def test_reasons_cut_long_values():
     assert len(check("json_fields", {long_path: 1}, '{"segment": 1}').reason) < 200
     assert len(check("numeric_range", {"min": 0, "max": 1}, "9" * 500).reason) < 200
     assert len(check("numeric_range", {"min": 0, "max": 10**400}, "9" * 500).reason) < 200
+    repeated_key = '{"' + "k" * 500 + '": 1, "' + "k" * 500 + '": 2}'
+    assert len(check("json_fields", {"k": 1}, repeated_key).reason) < 200
+
+
+def test_pass_reasons_count_in_the_singular():
+    assert check("json_fields", {"a": 1}, '{"a": 1}').reason == "all 1 field match"
+    assert check("contains", "a", "a").reason == "found all 1 expected piece"
 
 
 @pytest.mark.parametrize(
@@ -208,6 +215,23 @@ def test_numeric_range_uses_the_last_number(output, passed):
 )
 def test_numeric_range_reads_signs_decimals_and_thousands(output, value):
     assert check("numeric_range", {"min": value, "max": value}, output).passed is True
+
+
+@pytest.mark.parametrize(
+    ("output", "expected", "passed"),
+    [
+        ("20.000000000000000001", {"min": 10, "max": 20}, False),
+        ("9.999999999999999999", {"min": 10, "max": 20}, False),
+        ("0.1", {"min": 0.1, "max": 0.2}, True),
+        ("0.3", {"min": 0.1, "max": 0.3}, True),
+        ("0.30000000000000001", {"min": 0.1, "max": 0.3}, False),
+        pytest.param("9" * 400, {"min": 0, "max": 10**400}, True, id="400-nines"),
+        pytest.param("1" + "0" * 400, {"min": 0, "max": 10**400}, True, id="10e400-on-the-bound"),
+        pytest.param("1" + "0" * 399 + "1", {"min": 0, "max": 10**400}, False, id="10e400-plus-one"),
+    ],
+)
+def test_numeric_range_compares_exactly(output, expected, passed):
+    assert check("numeric_range", expected, output).passed is passed
 
 
 def test_numeric_range_reason_names_the_number_and_the_range():
