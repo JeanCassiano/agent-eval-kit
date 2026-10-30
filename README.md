@@ -23,6 +23,11 @@ make lint      # style and formatting
 
 `make help` lists every target.
 
+## Writing cases
+
+Cases are YAML files; see [docs/case-format.md](docs/case-format.md) and the suites in
+[examples/cases/](examples/cases/).
+
 ## License
 
 [MIT](LICENSE)

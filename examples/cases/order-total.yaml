@@ -1,0 +1,14 @@
+name: order-total
+version: "1"
+synthetic: true
+cases:
+  - id: total-three-items
+    input: "A notebook costs 12.50, a pen costs 2.25 and a ruler costs 3.25. What is the total? Answer with the number."
+    expected: {min: 18, max: 18}
+    check: {type: numeric_range}
+    tags: [arithmetic]
+  - id: shipping-estimate
+    input: "Estimate the shipping cost in dollars for a 2 kg parcel sent domestically. Answer with one number."
+    expected: {min: 5, max: 25}
+    check: {type: numeric_range}
+    tags: [estimate]

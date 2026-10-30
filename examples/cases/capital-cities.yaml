@@ -1,0 +1,19 @@
+name: capital-cities
+version: "1"
+synthetic: true
+cases:
+  - id: capital-fr
+    input: "What is the capital of France? Answer with the city name only."
+    expected: "Paris"
+    check: {type: exact, normalize: true}
+    tags: [geography, smoke]
+  - id: capital-jp
+    input: "What is the capital of Japan? Answer with the city name only."
+    expected: "Tokyo"
+    check: {type: exact, normalize: true}
+    tags: [geography]
+  - id: capital-br
+    input: "What is the capital of Brazil? Answer with the city name only."
+    expected: "Brasília"
+    check: {type: exact, normalize: true}
+    tags: [geography]
