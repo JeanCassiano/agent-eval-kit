@@ -41,5 +41,9 @@ Re-read every line you touched against the final diff before closing.
   a number from the mock names the seed.
 - Never state a guarantee the code does not enforce. Grep the owner you name; if a guard covers only
   part of the claim, narrow the claim.
+- **Docs written ahead of the code.** A component that does not exist yet (a gate, a target, the mock,
+  a report) appears only as intent ("is meant to", "once it lands"), never in the present tense. Before
+  saying a kind of claim was removed, grep the whole file for the concept, not only the sentence you
+  fixed.
 - **Widening a sentence re-opens its measurement.** Removing a qualifier or an exception turns a true
   statement into a claim about everything it now covers. Re-check at the new scope.
