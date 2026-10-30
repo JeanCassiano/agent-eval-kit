@@ -1,0 +1,67 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git commit*--no-verify*)",
+      "Bash(git push*--no-verify*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/check-commit-convention/check-commit-convention.py"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/check-branch-prefix/check-branch-prefix.py"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/block-no-verify/block-no-verify.py"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/block-protected-commit/block-protected-commit.py"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/block-protected-push/block-protected-push.py"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/remind-adversarial-verification/remind-adversarial-verification.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/require-audit-before-ready/require-audit-before-ready.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/require-comment-budget/require-comment-budget.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/sensors/remind-task-retro/remind-task-retro.py"
+          }
+        ]
+      }
+    ]
+  }
+}
