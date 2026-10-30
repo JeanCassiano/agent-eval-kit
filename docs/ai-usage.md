@@ -31,3 +31,20 @@ questions, so the reader can tell what was delegated from what was decided and v
   diffable.
 - **How I validated:** `make install && make test` in a fresh clone; `make lint` passing, and failing
   with exit ≠ 0 on a file with an unused import; the workflow checked with actionlint.
+
+## AE-8 — YAML case format, loader and validation
+
+> Draft written by the AI. Review it before closing the story.
+
+- **Tools:** Claude Code (Claude Opus).
+- **Delegated:** the loader (`agent_eval_kit.cases`), its tests, the three example suites and
+  `docs/case-format.md`.
+- **Decided by me:** approved the AI's plan: PyYAML with `safe_load` and plain dataclasses with
+  hand-written validation instead of pydantic, so each error names file, case and field. Also decided
+  that the AI writes AE-9 and AE-11 too, to finish v1 faster.
+- **Where the AI was wrong:** the malformed-YAML test first expected the error on line 5; the broken
+  line is line 6, which is what the loader reported. The test expectation was fixed, not the loader.
+- **How I validated:** `make verify`; the error messages quoted in `docs/case-format.md` were produced
+  by running the loader on those inputs; six mutations of the validation rules (synthetic flag,
+  duplicate ids across files, unknown fields, unknown check type, `min > max`, chained traceback) each
+  turned a test red.
