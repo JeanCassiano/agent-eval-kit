@@ -1,0 +1,345 @@
+from pathlib import Path
+
+import pytest
+
+from agent_eval_kit.cases import CHECK_TYPES, Check, load_suites
+from agent_eval_kit.checks import CHECKERS, CheckResult, run_check
+
+EXAMPLES = Path(__file__).resolve().parent.parent / "examples" / "cases"
+
+
+def check(check_type, expected, output, **params):
+    return run_check(Check(type=check_type, params=params), expected, output)
+
+
+@pytest.mark.parametrize(
+    ("check_type", "expected", "output", "params", "passed", "reason_part"),
+    [
+        ("exact", "42", "42", {}, True, ""),
+        ("exact", "olá", " Olá ", {"normalize": True}, True, ""),
+        ("json_fields", {"status": "ok"}, '{"status":"ok","n":3}', {}, True, ""),
+        ("json_fields", {"status": "ok"}, "não é json", {}, False, "invalid JSON"),
+        ("json_fields", {"status": "ok", "n": 3}, '{"status":"ok"}', {}, False, "'n'"),
+        ("contains", ["refund", "order #A-1001"], "We will refund you.", {}, False, "'order #A-1001'"),
+        ("numeric_range", {"min": 10, "max": 20}, "10", {}, True, ""),
+        ("numeric_range", {"min": 10, "max": 20}, "nenhum", {}, False, "no number found"),
+    ],
+    ids=[
+        "exact",
+        "exact-normalized",
+        "json-correct",
+        "json-invalid",
+        "json-missing-field",
+        "contains-missing-piece",
+        "range-on-the-bound",
+        "range-no-number",
+    ],
+)
+def test_story_scenarios(check_type, expected, output, params, passed, reason_part):
+    result = check(check_type, expected, output, **params)
+
+    assert isinstance(result, CheckResult)
+    assert result.passed is passed
+    assert result.reason
+    assert reason_part in result.reason
+
+
+def test_registry_is_the_list_of_check_types():
+    assert tuple(CHECKERS) == CHECK_TYPES == ("exact", "json_fields", "contains", "numeric_range")
+    assert CHECKERS["exact"].options == ("normalize",)
+    assert CHECKERS["contains"].options == ("ignore_case",)
+    assert CHECKERS["json_fields"].options == CHECKERS["numeric_range"].options == ()
+
+
+@pytest.mark.parametrize(
+    ("expected", "output", "params", "passed"),
+    [
+        ("Paris", "Paris", {}, True),
+        ("Paris", "paris", {}, False),
+        ("Paris", "Paris\n", {}, False),
+        ("Paris", " PARIS \n", {"normalize": True}, True),
+        ("New York", "new   york", {"normalize": True}, True),
+        ("New York", "NewYork", {"normalize": True}, False),
+        ("Brasília", "Brasília", {"normalize": True}, True),
+        ("Straße", "STRASSE", {"normalize": True}, True),
+        ("Paris", "Paris.", {"normalize": True}, False),
+    ],
+)
+def test_exact(expected, output, params, passed):
+    assert check("exact", expected, output, **params).passed is passed
+
+
+def test_exact_reason_shows_both_texts_and_where_they_differ():
+    reason = check("exact", "Paris", "Paris\n").reason
+
+    assert "'Paris'" in reason
+    assert "'Paris\\n'" in reason
+    assert "character 6" in reason
+
+
+def test_exact_reason_truncates_a_long_output():
+    reason = check("exact", "short", "x" * 500).reason
+
+    assert len(reason) < 200
+    assert "character 1" in reason
+
+
+@pytest.mark.parametrize(
+    ("expected", "output", "passed"),
+    [
+        ({"items.count": 3}, '{"items": {"count": 3}}', True),
+        ({"a.b.c": "deep"}, '{"a": {"b": {"c": "deep"}}}', True),
+        ({"n": 3}, '{"n": 3.0}', True),
+        ({"n": 3}, '{"n": "3"}', False),
+        ({"flag": True}, '{"flag": 1}', False),
+        ({"n": 1}, '{"n": true}', False),
+        ({"n": 0}, '{"n": false}', False),
+        ({"tags": ["a", "b"]}, '{"tags": ["a", "b"]}', True),
+        ({"tags": [1]}, '{"tags": [true]}', False),
+        ({"tags": ["a", "b"]}, '{"tags": ["b", "a"]}', False),
+        ({"meta": {"x": 1}}, '{"meta": {"x": 1, "y": 2}}', False),
+        ({"note": None}, '{"note": null}', True),
+        ({"note": None}, "{}", False),
+        ({"status": "ok"}, ' \n {"status": "ok", "extra": [1, 2]} \n', True),
+        ({"status": "ok"}, '\t{"status": "ok"}\r\n', True),
+        ({"status": "ok"}, '\u00a0{"status": "ok"}', False),
+        ({"items.0": 1}, '{"items": [1]}', False),
+        ({"a.b": 1}, '{"a.b": 1}', False),
+    ],
+)
+def test_json_fields(expected, output, passed):
+    assert check("json_fields", expected, output).passed is passed
+
+
+@pytest.mark.parametrize(
+    ("output", "reason_part"),
+    [
+        ('```json\n{"status": "ok"}\n```', "Markdown code fence"),
+        ('[{"status": "ok"}]', "a JSON object, got a list"),
+        ('"ok"', "a JSON object, got a string"),
+        ('{"status": NaN}', "invalid JSON"),
+        ('{"status": Infinity}', "invalid JSON"),
+        ('{"status": "error", "status": "ok"}', "duplicate key 'status'"),
+        ('{"status": "ok"', "invalid JSON"),
+        ("", "invalid JSON"),
+        ("[" * 100_000, "invalid JSON"),
+        pytest.param('{"status": ' + "1" * 5000 + "}", "too many digits", id="5000-digit-integer"),
+    ],
+)
+def test_json_fields_rejects_what_is_not_one_json_object(output, reason_part):
+    result = check("json_fields", {"status": "ok"}, output)
+
+    assert result.passed is False
+    assert reason_part in result.reason
+
+
+def test_json_fields_reason_lists_every_failing_field():
+    result = check(
+        "json_fields",
+        {"status": "ok", "n": 3, "a.b": 1, "x.y": 2},
+        '{"status": "error", "a": 5, "x": {}}',
+    )
+
+    assert result.passed is False
+    assert "field 'status': expected 'ok', got 'error'" in result.reason
+    assert "field 'n' is missing" in result.reason
+    assert "field 'a.b' is missing: 'a' is not an object" in result.reason
+    assert "field 'x.y' is missing" in result.reason
+
+
+LONG = "x" * 500
+
+
+@pytest.mark.parametrize(
+    ("check_type", "expected", "output"),
+    [
+        pytest.param("exact", LONG, "y", id="exact-expected"),
+        pytest.param("exact", "y", LONG, id="exact-output"),
+        pytest.param(
+            "json_fields", {"k": 1}, '{"' + LONG + '": 1, "' + LONG + '": 2}', id="json-repeated-key"
+        ),
+        pytest.param("json_fields", {LONG: 1}, '{"' + LONG + '": 2}', id="json-mismatch-path"),
+        pytest.param("json_fields", {"k": LONG}, '{"k": 1}', id="json-mismatch-expected"),
+        pytest.param("json_fields", {"k": 1}, '{"k": "' + LONG + '"}', id="json-mismatch-got"),
+        pytest.param("json_fields", {LONG + ".b": 1}, '{"' + LONG + '": 1}', id="json-path-not-object"),
+        pytest.param("json_fields", {LONG + ".b": 1}, '{"' + LONG + '": 1}', id="json-walked-not-object"),
+        pytest.param("json_fields", {LONG: 1}, "{}", id="json-missing-path"),
+        pytest.param("contains", [LONG], "y", id="contains-piece"),
+        pytest.param("numeric_range", {"min": -(10**500), "max": 0}, "5", id="range-min"),
+        pytest.param("numeric_range", {"min": 0, "max": 10**500}, "-5", id="range-max"),
+        pytest.param("numeric_range", {"min": 0, "max": 1}, "9" * 500, id="range-number"),
+    ],
+)
+def test_every_quoted_value_is_cut(check_type, expected, output):
+    assert len(check(check_type, expected, output).reason) < 200
+
+
+def test_cut_keeps_the_first_60_characters_of_the_quoted_value():
+    whole = check("exact", "a" * 58, "b").reason
+    cut = check("exact", "a" * 59, "b").reason
+
+    assert "'" + "a" * 58 + "'" in whole
+    assert "…" not in whole
+    assert "'" + "a" * 59 + "…" in cut
+    assert "'" + "a" * 59 + "'" not in cut
+
+
+def test_pass_reasons_count_in_the_singular():
+    assert check("json_fields", {"a": 1}, '{"a": 1}').reason == "all 1 field match"
+    assert check("contains", "a", "a").reason == "found all 1 expected piece"
+
+
+@pytest.mark.parametrize(
+    ("expected", "output", "params", "passed"),
+    [
+        ("refund", "We will refund you.", {}, True),
+        (["refund", "#A-1001"], "Refund for #A-1001 issued.", {}, False),
+        (["refund", "#A-1001"], "Refund for #A-1001 issued.", {"ignore_case": True}, True),
+        (["STRASSE"], "straße", {"ignore_case": True}, True),
+        (["refund", "order"], "refund", {}, False),
+        ("Refund", "refund", {}, False),
+        ("refund", "REFUND", {}, False),
+        ("abc", "cab", {}, False),
+    ],
+)
+def test_contains(expected, output, params, passed):
+    assert check("contains", expected, output, **params).passed is passed
+
+
+def test_contains_reason_lists_every_missing_piece():
+    reason = check("contains", ["alpha", "beta", "gamma"], "only beta here").reason
+
+    assert "'alpha'" in reason
+    assert "'gamma'" in reason
+    assert "'beta'" not in reason
+
+
+@pytest.mark.parametrize(
+    ("output", "passed"),
+    [
+        ("20", True),
+        ("9.99", False),
+        ("20.01", False),
+        ("The total is 18.", True),
+        ("12.50 + 2.25 + 3.25 = 18", True),
+        ("A 2 kg parcel costs about 12 dollars", True),
+        ("It costs 15, maybe 25", False),
+        ("-15", False),
+        ("Order A-15 costs 12", True),
+        ("about 1,000 or 15", True),
+        ("$12.5", True),
+    ],
+)
+def test_numeric_range_uses_the_last_number(output, passed):
+    assert check("numeric_range", {"min": 10, "max": 20}, output).passed is passed
+
+
+@pytest.mark.parametrize(
+    ("output", "value"),
+    [
+        ("-5", -5),
+        ("x = -2.5", -2.5),
+        ("Order A-15", 15),
+        ("1,000", 1000),
+        ("about 1,234,567 units", 1234567),
+        ("+3", 3),
+        ("\u22125", -5),
+        ("x = \u22122.5", -2.5),
+        ("1_000", 1),
+        ("18,50", 50),
+        ("1,0000", 1000),
+        ("18kg", 18),
+        ("1e3", 1),
+    ],
+)
+def test_numeric_range_reads_signs_decimals_and_thousands(output, value):
+    assert check("numeric_range", {"min": value, "max": value}, output).passed is True
+
+
+@pytest.mark.parametrize(
+    ("output", "expected", "passed"),
+    [
+        ("20.000000000000000001", {"min": 10, "max": 20}, False),
+        ("9.999999999999999999", {"min": 10, "max": 20}, False),
+        ("0.1", {"min": 0.1, "max": 0.2}, True),
+        ("0.3", {"min": 0.1, "max": 0.3}, True),
+        ("0.30000000000000001", {"min": 0.1, "max": 0.3}, False),
+        pytest.param("9" * 400, {"min": 0, "max": 10**400}, True, id="400-nines"),
+        pytest.param("1" + "0" * 400, {"min": 0, "max": 10**400}, True, id="10e400-on-the-bound"),
+        pytest.param("1" + "0" * 399 + "1", {"min": 0, "max": 10**400}, False, id="10e400-plus-one"),
+    ],
+)
+def test_numeric_range_compares_exactly(output, expected, passed):
+    assert check("numeric_range", expected, output).passed is passed
+
+
+def test_numeric_range_reason_names_the_number_and_the_range():
+    result = check("numeric_range", {"min": 10, "max": 20}, "first 15, then 25.5")
+
+    assert result.passed is False
+    assert "25.5" in result.reason
+    assert "[10, 20]" in result.reason
+    assert "last of 2 numbers" in result.reason
+
+
+def test_numeric_range_ignores_digits_glued_to_a_word_or_a_dot():
+    assert check("numeric_range", {"min": 0, "max": 100}, "version v2 of A1001").reason == "no number found"
+    assert check("numeric_range", {"min": 1.2, "max": 1.2}, "release 1.2.3").passed is True
+    assert check("numeric_range", {"min": 0, "max": 1}, ".5").reason == "no number found"
+
+
+@pytest.mark.parametrize("check_type", CHECK_TYPES)
+@pytest.mark.parametrize("output", ["", " ", "\x00", "```", "{", "-", ",", "." * 1000, "🙂" * 10])
+def test_no_checker_raises_on_odd_output(check_type, output):
+    expected = {
+        "exact": "x",
+        "json_fields": {"a.b": 1},
+        "contains": ["x"],
+        "numeric_range": {"min": 0, "max": 1},
+    }[check_type]
+
+    result = check(check_type, expected, output)
+
+    assert result.passed is False
+    assert result.reason
+
+
+def test_run_check_rejects_an_unknown_type_or_option():
+    with pytest.raises(ValueError, match="fuzzy"):
+        check("fuzzy", "x", "x")
+    with pytest.raises(ValueError, match="normalise"):
+        check("exact", "x", "x", normalise=True)
+    with pytest.raises(ValueError, match="true or false"):
+        check("exact", "x", "x", normalize="yes")
+
+
+@pytest.mark.parametrize(
+    ("check_type", "expected"),
+    [
+        ("exact", "42"),
+        ("json_fields", {"n": 42}),
+        ("contains", "42"),
+        ("numeric_range", {"min": 0, "max": 50}),
+    ],
+)
+def test_run_check_rejects_a_non_string_output(check_type, expected):
+    with pytest.raises(TypeError, match="output must be a string"):
+        check(check_type, expected, 42)
+
+
+def test_example_suites_pass_with_correct_answers():
+    answers = {
+        "capital-fr": "paris",
+        "capital-jp": " Tokyo\n",
+        "capital-br": "Brasília",
+        "total-three-items": "12.50 + 2.25 + 3.25 = 18",
+        "shipping-estimate": "About 12 dollars.",
+        "triage-refund": '{"category": "billing", "priority": "high"}',
+        "triage-password": '{"category": "account", "priority": "low"}',
+    }
+    cases = [case for suite in load_suites(EXAMPLES) for case in suite.cases]
+
+    assert sorted(case.id for case in cases) == sorted(answers)
+    for case in cases:
+        result = run_check(case.check, case.expected, answers[case.id])
+        assert result.passed, (case.id, result.reason)

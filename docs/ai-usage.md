@@ -53,3 +53,37 @@ questions, so the reader can tell what was delegated from what was decided and v
   by running the loader on those inputs; on the first commit, six mutations of the validation rules (synthetic flag,
   duplicate ids across files, unknown fields, unknown check type, `min > max`, chained traceback) each
   turned a test red.
+
+## AE-11 — Checkers: exact, JSON fields, contained text and numeric range
+
+> Draft written by the AI. Review it, and the checkers, before closing the story: the story's last
+> criterion is that I can explain every failure reason without AI.
+
+- **Tools:** Claude Code (Claude Opus 5.5).
+- **Delegated:** all of the code, by my decision of 2026-10-30: the checkers and their registry
+  (`agent_eval_kit.checks`), the loader change that takes the check types from that registry and
+  rejects unknown options, their tests, and the "Checkers" section of `docs/case-format.md`.
+- **Decided by me:** approved the AI's plan, and settled three measurement choices it put to me:
+  `numeric_range` reads the last number in the output, `json_fields` is strict (an answer wrapped in a
+  Markdown code fence fails), and failure reasons are in English like the rest of the code.
+- **Where the AI was wrong:** on reading its own first draft, the reasons said "all 1 fields", printed
+  a 400-digit number in full and leaked Python's integer-limit message with its `sys.` hint. Option
+  validation was written twice, and the copy in `run_check` accepted `"yes"` as true. A long JSON
+  object was still printed in full after a doc sentence claimed long values were cut. Each one was
+  fixed and the last two got a test. The first cold audit failed the PR on that same sentence: field
+  paths and range bounds were still printed whole (a 479-character reason). It also found two untested
+  branches, the too-many-digits JSON error and the non-string output guard. All three now have tests.
+  The second audit failed it again on the same sentence, for the repeated-key reason, which the fix had
+  missed because only the reported sites were patched; every quoting site was then swept. It also
+  found that `numeric_range` compared through floats, so `20.000000000000000001` passed `[10, 20]`;
+  it now reads that number as an exact decimal. The third audit failed the PR because the docs then
+  called the bounds exact too, while the YAML reader rounds a long decimal bound to a float; the
+  sentences were narrowed and every sentence of the "Checkers" section re-checked against the code.
+  The fourth audit passed, and still found four places that cut a quoted value with no test, a
+  mutation count left stale in this entry, and a typographic minus (`−5`) read as 5. Every quoting
+  site now has its own test, the count is no longer repeated here, and `−5` reads as -5.
+- **How I validated:** `make verify`; mutations of the checkers and the loader (bool vs number, both
+  range bounds, first vs last number, case folding, Unicode normalization, missing fields, code
+  fences, `NaN`, repeated JSON keys, option validation, the output type guard, cut reasons, exact decimals) each
+  turned a test red; the reasons quoted in
+  `docs/case-format.md` were produced by running the checkers.

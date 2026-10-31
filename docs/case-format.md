@@ -29,14 +29,15 @@ cases:
 | `cases[].input` | yes | any YAML value except `null` | What the agent receives. |
 | `cases[].expected` | yes | depends on `check.type` | The reference the checker compares the output against. |
 | `cases[].check.type` | yes | one of the types below | Which checker decides pass or fail. |
-| `cases[].check.*` | no | per checker | Checker options, such as `normalize`. |
+| `cases[].check.*` | no | `true` or `false` | Checker options, such as `normalize`; see [Checkers](#checkers). |
 | `cases[].tags` | no | list of strings | Free labels to group and filter cases. |
 
 Any other suite or case field is rejected, so a typo like `expect:` fails loudly instead of being
 ignored. A key repeated in the same mapping is rejected too, instead of the last value silently winning.
 Anchors, aliases and merge keys (`<<: *base`) work as in any YAML file, and a key brought in by a merge
 may be overridden by the mapping's own key.
-Options inside `check` are not validated by the loader.
+Options inside `check` are checked too: each checker accepts only its own options, so `normalise: true`
+is an error rather than a silently ignored typo.
 
 YAML reads some unquoted words as booleans (`yes`, `no`, `on`, `off`) and some numbers differently than
 written. Quote any string that could be read that way, such as `expected: "NO"`.
@@ -46,12 +47,64 @@ written. Quote any string that could be read that way, such as `expected: "NO"`.
 | `check.type` | `expected` | Example |
 | --- | --- | --- |
 | `exact` | a string | `expected: "Paris"` |
-| `json_fields` | a mapping of field path to value; nested paths use dots | `expected: {status: ok, items.count: 3}` |
+| `json_fields` | a mapping of field path to value; a path is names joined by dots, none empty | `expected: {status: ok, items.count: 3}` |
 | `contains` | a non-empty string, or a list of non-empty strings that must all appear | `expected: [refund, "order #A-1001"]` |
 | `numeric_range` | `{min, max}`, finite numbers, both inclusive, `min <= max` | `expected: {min: 10, max: 20}` |
 
-The loader checks the shape of `expected` for the declared type. Each checker's options and its pass rule
-are defined by the checker itself.
+The loader checks the shape of `expected` for the declared type.
+
+## Checkers
+
+`agent_eval_kit.checks.run_check(case.check, case.expected, output)` runs the checker named by
+`check.type` on the agent's text output and returns a `CheckResult` with `passed` and a `reason`. The
+reason is written for a person reading a failed run, and is set on a pass too. When it quotes something
+from the output or from `expected` that is longer than 60 characters, counting any quote marks, it keeps
+the first 60 and adds `…`. Checkers never raise on odd text (empty, binary, deeply nested); they fail
+with a reason. `run_check` raises only for a call that no loaded suite can
+make, such as an output that is not a string or an unknown type or option. Every option is a boolean
+flag, off by default.
+
+| `check.type` | Options | Passes when |
+| --- | --- | --- |
+| `exact` | `normalize` | the output equals `expected`. Without `normalize` the comparison is strict, so a trailing newline fails. With it, both sides are Unicode-normalized (NFC), trimmed, their inner whitespace collapsed to one space and case folded, so `" PARIS\n"` matches `"Paris"`. Punctuation still counts. |
+| `json_fields` | none | the whole output is one JSON object (surrounding spaces, tabs and newlines allowed) and every listed field has the expected value. Other fields are ignored. |
+| `contains` | `ignore_case` | every expected piece appears in the output. |
+| `numeric_range` | none | the **last** number in the output is within `[min, max]`, both ends included. |
+
+Rules a reader might otherwise relax:
+
+- **`json_fields` is strict JSON.** An answer wrapped in a Markdown code fence fails, with a reason that
+  says so, and so do `NaN`, `Infinity` and a key repeated in one object. The checker measures whether the
+  agent followed the requested format, not only whether the values are right.
+- **`json_fields` compares types.** `true` is not `1` and `"3"` is not `3`; `3` and `3.0` are equal.
+  Nested objects and lists in `expected` must match exactly, not as a subset. A path cannot index into a
+  list (`items.0` is not supported), and a key that itself contains a dot cannot be reached.
+- **`numeric_range` reads the last number** because it is usually the conclusion when the agent shows its
+  work: `"12.50 + 2.25 + 3.25 = 18"` reads as 18. A number right after a letter, an underscore or a dot
+  is skipped (`v2`, `A1001`, the `.3` of `1.2.3`), and so is a minus sign right after a letter:
+  `"order A-15"` reads as 15, not -15. A number followed by letters still counts: `18kg` reads as 18.
+  The typographic minus `−5` (U+2212) reads as -5. Commas only group thousands (`1,000`).
+- **The output's number is read exactly, as a decimal**, so `20.000000000000000001` is outside
+  `[10, 20]`. The bounds are YAML numbers: an integer is exact, and a bound written with up to 15
+  significant digits is compared as written, so `0.1` is inside `[0.1, 0.2]`. A longer decimal bound is
+  rounded by the YAML reader to the nearest float.
+- **Known limits of `numeric_range`:** a decimal comma (`18,50`) reads as two numbers, a malformed group
+  such as `1,0000` reads as 1000, an underscore group such as `1_000` reads as 1, a decimal without its
+  leading zero (`.5`) is not read, and scientific notation is not understood (`1e3` reads as 1).
+
+Examples of reasons, as returned by the checkers:
+
+| `check.type` | Output | Passed | Reason |
+| --- | --- | --- | --- |
+| `exact` + `normalize` | `"Paris."` | no | `expected 'Paris', got 'Paris.'; first difference at character 6 after normalizing spaces and case` |
+| `json_fields` | `{"category": "billing", "priority": "low"}` | no | `field 'priority': expected 'high', got 'low'` |
+| `json_fields` | `{"status": "ok"}` | no | `field 'items.count' is missing` |
+| `json_fields` | a fenced JSON block | no | `invalid JSON: the output is wrapped in a Markdown code fence` |
+| `contains` | `"We will refund you."` | no | `missing 1 of 2 pieces: 'order #A-1001'` |
+| `numeric_range` | `"12.50 + 2.25 + 3.25 = 18"` | yes | `18 (last of 4 numbers found) is within [10, 20]` |
+| `numeric_range` | `"no idea"` | no | `no number found` |
+
+When a `json_fields` case fails on several fields, the reason lists all of them, joined by `; `.
 
 ## Errors
 
@@ -61,6 +114,7 @@ when they are known, and the error carries them as `path`, `case_id` and `field`
 ```text
 examples/cases/toy.yaml: case 'greet': field 'expected': required
 examples/cases/toy.yaml: case 'greet': field 'check.type': unknown type 'fuzzy'; accepted: exact, json_fields, contains, numeric_range
+examples/cases/toy.yaml: case 'greet': field 'check.normalise': unknown option; accepted: normalize
 examples/cases/toy.yaml: invalid YAML at line 6, column 4: expected <block end>, but found '<block mapping start>'
 ```
 

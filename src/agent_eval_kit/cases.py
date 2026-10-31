@@ -11,7 +11,9 @@ from typing import Any
 
 import yaml
 
-CHECK_TYPES = ("exact", "json_fields", "contains", "numeric_range")
+from agent_eval_kit.checks import CHECKERS, option_problem
+
+CHECK_TYPES = tuple(CHECKERS)
 SUITE_SUFFIXES = (".yaml", ".yml")
 
 _CASE_FIELDS = ("id", "input", "expected", "check", "tags")
@@ -142,10 +144,11 @@ def _parse_case(path: Path, index: int, raw: Any) -> Case:
     check_type = raw_check.get("type")
     if check_type not in CHECK_TYPES:
         raise fail("check.type", f"unknown type {check_type!r}; accepted: {', '.join(CHECK_TYPES)}")
-    check = Check(
-        type=check_type,
-        params=MappingProxyType({key: value for key, value in raw_check.items() if key != "type"}),
-    )
+    params = {key: value for key, value in raw_check.items() if key != "type"}
+    problem = option_problem(check_type, params)
+    if problem:
+        raise fail(f"check.{problem[0]}", problem[1])
+    check = Check(type=check_type, params=MappingProxyType(params))
 
     problem = _expected_problem(check_type, raw["expected"])
     if problem:
@@ -161,8 +164,12 @@ def _parse_case(path: Path, index: int, raw: Any) -> Case:
 def _expected_problem(check_type: str, expected: Any) -> str | None:
     if check_type == "exact" and not isinstance(expected, str):
         return "for `exact`, must be a string"
-    if check_type == "json_fields" and not (isinstance(expected, dict) and expected):
-        return "for `json_fields`, must be a non-empty mapping of field path to value"
+    if check_type == "json_fields":
+        if not (isinstance(expected, dict) and expected):
+            return "for `json_fields`, must be a non-empty mapping of field path to value"
+        for path in expected:
+            if not isinstance(path, str) or not all(path.split(".")):
+                return f"for `json_fields`, {path!r} is not a field path; join names with dots, like `a.b`"
     if check_type == "contains":
         parts = [expected] if isinstance(expected, str) else expected
         if not isinstance(parts, list) or not parts or not all(isinstance(p, str) and p for p in parts):
