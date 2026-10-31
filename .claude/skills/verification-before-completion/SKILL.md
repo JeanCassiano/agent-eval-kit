@@ -33,6 +33,10 @@ List what changed with `git diff --name-only --no-renames origin/main...HEAD` pl
 3. **The surface's own checks**, when they apply:
    - a metric or a checker changed → the seed-fixed end-to-end numbers either stay the same, or the PR
      says why they moved and by how much;
+   - code under `src/` changed → `make mutate MODULE=<module>`, and settle each survivor in a changed
+     function: a test that kills it, or a line in the PR saying why it survives (equivalent, cosmetic,
+     or out of the tool's reach). Mutation testing does not replace listing the sites of a universal
+     claim (`.claude/rules/documentation.rule.md`);
    - OTel export, the collector, Prometheus, Tempo or the compose changed → `make verify VERIFY_E2E=1`:
      a run reaches the stack and the metric and the trace are queryable;
    - the Docker image or the demo path changed → `docker compose run --rm eval demo` on a clean

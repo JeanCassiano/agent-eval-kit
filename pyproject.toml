@@ -13,6 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mutmut==3.3.1",
     "pytest==8.4.2",
     "pytest-cov==7.0.0",
     "ruff==0.14.1",
@@ -35,6 +36,13 @@ target-version = "py311"
 src = ["src", "tests"]
 # Copied from indigotech/br-taqtile-observability; left unformatted so the two copies stay diffable.
 extend-exclude = ["sensors", "tests/test_sensors.py"]
+
+[tool.mutmut]
+paths_to_mutate = ["src/"]
+# mutmut 3.3.1 passes tests_dir to pytest as arguments and has no other option for them. The sensor
+# tests load the hooks from sensors/, which mutmut does not copy, and never import src/.
+tests_dir = ["tests/", "--ignore=tests/test_sensors.py"]
+also_copy = ["examples/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
