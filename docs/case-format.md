@@ -57,9 +57,10 @@ The loader checks the shape of `expected` for the declared type.
 
 `agent_eval_kit.checks.run_check(case.check, case.expected, output)` runs the checker named by
 `check.type` on the agent's text output and returns a `CheckResult` with `passed` and a `reason`. The
-reason is written for a person reading a failed run, and is set on a pass too. Anything it quotes from
-the output or from `expected` is cut to 60 characters. Checkers never raise on odd text (empty, binary,
-deeply nested); they fail with a reason. `run_check` raises only for a call that no loaded suite can
+reason is written for a person reading a failed run, and is set on a pass too. When it quotes something
+from the output or from `expected` that is longer than 60 characters, counting any quote marks, it keeps
+the first 60 and adds `…`. Checkers never raise on odd text (empty, binary, deeply nested); they fail
+with a reason. `run_check` raises only for a call that no loaded suite can
 make, such as an output that is not a string or an unknown type or option. Every option is a boolean
 flag, off by default.
 
@@ -82,13 +83,14 @@ Rules a reader might otherwise relax:
   work: `"12.50 + 2.25 + 3.25 = 18"` reads as 18. A number right after a letter, an underscore or a dot
   is skipped (`v2`, `A1001`, the `.3` of `1.2.3`), and so is a minus sign right after a letter:
   `"order A-15"` reads as 15, not -15. A number followed by letters still counts: `18kg` reads as 18.
-  Commas only group thousands (`1,000`).
+  The typographic minus `−5` (U+2212) reads as -5. Commas only group thousands (`1,000`).
 - **The output's number is read exactly, as a decimal**, so `20.000000000000000001` is outside
   `[10, 20]`. The bounds are YAML numbers: an integer is exact, and a bound written with up to 15
   significant digits is compared as written, so `0.1` is inside `[0.1, 0.2]`. A longer decimal bound is
   rounded by the YAML reader to the nearest float.
 - **Known limits of `numeric_range`:** a decimal comma (`18,50`) reads as two numbers, a malformed group
-  such as `1,0000` reads as 1000, and scientific notation is not understood (`1e3` reads as 1).
+  such as `1,0000` reads as 1000, an underscore group such as `1_000` reads as 1, a decimal without its
+  leading zero (`.5`) is not read, and scientific notation is not understood (`1e3` reads as 1).
 
 Examples of reasons, as returned by the checkers:
 

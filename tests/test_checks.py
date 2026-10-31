@@ -101,6 +101,10 @@ def test_exact_reason_truncates_a_long_output():
         ({"note": None}, '{"note": null}', True),
         ({"note": None}, "{}", False),
         ({"status": "ok"}, ' \n {"status": "ok", "extra": [1, 2]} \n', True),
+        ({"status": "ok"}, '\t{"status": "ok"}\r\n', True),
+        ({"status": "ok"}, '\u00a0{"status": "ok"}', False),
+        ({"items.0": 1}, '{"items": [1]}', False),
+        ({"a.b": 1}, '{"a.b": 1}', False),
     ],
 )
 def test_json_fields(expected, output, passed):
@@ -114,6 +118,7 @@ def test_json_fields(expected, output, passed):
         ('[{"status": "ok"}]', "a JSON object, got a list"),
         ('"ok"', "a JSON object, got a string"),
         ('{"status": NaN}', "invalid JSON"),
+        ('{"status": Infinity}', "invalid JSON"),
         ('{"status": "error", "status": "ok"}', "duplicate key 'status'"),
         ('{"status": "ok"', "invalid JSON"),
         ("", "invalid JSON"),
@@ -142,17 +147,41 @@ def test_json_fields_reason_lists_every_failing_field():
     assert "field 'x.y' is missing" in result.reason
 
 
-def test_reasons_cut_long_values():
-    big = '{"meta": {"list": [' + ", ".join(["1"] * 500) + "]}}"
-    long_path = ".".join(["segment"] * 50)
+LONG = "x" * 500
 
-    assert len(check("json_fields", {"meta": {"list": []}}, big).reason) < 200
-    assert len(check("json_fields", {long_path: 1}, "{}").reason) < 200
-    assert len(check("json_fields", {long_path: 1}, '{"segment": 1}').reason) < 200
-    assert len(check("numeric_range", {"min": 0, "max": 1}, "9" * 500).reason) < 200
-    assert len(check("numeric_range", {"min": 0, "max": 10**400}, "9" * 500).reason) < 200
-    repeated_key = '{"' + "k" * 500 + '": 1, "' + "k" * 500 + '": 2}'
-    assert len(check("json_fields", {"k": 1}, repeated_key).reason) < 200
+
+@pytest.mark.parametrize(
+    ("check_type", "expected", "output"),
+    [
+        pytest.param("exact", LONG, "y", id="exact-expected"),
+        pytest.param("exact", "y", LONG, id="exact-output"),
+        pytest.param(
+            "json_fields", {"k": 1}, '{"' + LONG + '": 1, "' + LONG + '": 2}', id="json-repeated-key"
+        ),
+        pytest.param("json_fields", {LONG: 1}, '{"' + LONG + '": 2}', id="json-mismatch-path"),
+        pytest.param("json_fields", {"k": LONG}, '{"k": 1}', id="json-mismatch-expected"),
+        pytest.param("json_fields", {"k": 1}, '{"k": "' + LONG + '"}', id="json-mismatch-got"),
+        pytest.param("json_fields", {LONG + ".b": 1}, '{"' + LONG + '": 1}', id="json-path-not-object"),
+        pytest.param("json_fields", {LONG + ".b": 1}, '{"' + LONG + '": 1}', id="json-walked-not-object"),
+        pytest.param("json_fields", {LONG: 1}, "{}", id="json-missing-path"),
+        pytest.param("contains", [LONG], "y", id="contains-piece"),
+        pytest.param("numeric_range", {"min": -(10**500), "max": 0}, "5", id="range-min"),
+        pytest.param("numeric_range", {"min": 0, "max": 10**500}, "-5", id="range-max"),
+        pytest.param("numeric_range", {"min": 0, "max": 1}, "9" * 500, id="range-number"),
+    ],
+)
+def test_every_quoted_value_is_cut(check_type, expected, output):
+    assert len(check(check_type, expected, output).reason) < 200
+
+
+def test_cut_keeps_the_first_60_characters_of_the_quoted_value():
+    whole = check("exact", "a" * 58, "b").reason
+    cut = check("exact", "a" * 59, "b").reason
+
+    assert "'" + "a" * 58 + "'" in whole
+    assert "…" not in whole
+    assert "'" + "a" * 59 + "…" in cut
+    assert "'" + "a" * 59 + "'" not in cut
 
 
 def test_pass_reasons_count_in_the_singular():
@@ -214,6 +243,11 @@ def test_numeric_range_uses_the_last_number(output, passed):
         ("1,000", 1000),
         ("about 1,234,567 units", 1234567),
         ("+3", 3),
+        ("\u22125", -5),
+        ("x = \u22122.5", -2.5),
+        ("1_000", 1),
+        ("18,50", 50),
+        ("1,0000", 1000),
         ("18kg", 18),
         ("1e3", 1),
     ],
@@ -251,6 +285,7 @@ def test_numeric_range_reason_names_the_number_and_the_range():
 def test_numeric_range_ignores_digits_glued_to_a_word_or_a_dot():
     assert check("numeric_range", {"min": 0, "max": 100}, "version v2 of A1001").reason == "no number found"
     assert check("numeric_range", {"min": 1.2, "max": 1.2}, "release 1.2.3").passed is True
+    assert check("numeric_range", {"min": 0, "max": 1}, ".5").reason == "no number found"
 
 
 @pytest.mark.parametrize("check_type", CHECK_TYPES)

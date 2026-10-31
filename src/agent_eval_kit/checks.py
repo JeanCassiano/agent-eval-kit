@@ -188,8 +188,9 @@ def _contains(expected: str | list[str], output: str, *, ignore_case: bool) -> C
 
 
 # Digits glued to a word or a dot are not a number (`v2`, `A1001`), nor is a sign after one: `A-15` reads
-# as 15. Commas only group thousands (`1,000`); a decimal comma such as `18,50` reads as two numbers.
-_NUMBER = re.compile(r"(?<![\w.])[-+]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?")
+# as 15. U+2212 is the minus sign typography uses. Commas only group thousands (`1,000`); a decimal
+# comma such as `18,50` reads as two numbers.
+_NUMBER = re.compile(r"(?<![\w.])[-+\u2212]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?")
 
 
 @_register("numeric_range")
@@ -199,7 +200,7 @@ def _numeric_range(expected: Mapping[str, float], output: str) -> CheckResult:
     if not found:
         return CheckResult(False, "no number found")
     token = found[-1]
-    value = Decimal(token.replace(",", ""))
+    value = Decimal(token.replace(",", "").replace("\u2212", "-"))
     which = f" (last of {len(found)} numbers found)" if len(found) > 1 else ""
     inside = Decimal(str(low)) <= value <= Decimal(str(high))
     verdict = "within" if inside else "outside"

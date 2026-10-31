@@ -79,7 +79,10 @@ questions, so the reader can tell what was delegated from what was decided and v
   it now reads that number as an exact decimal. The third audit failed the PR because the docs then
   called the bounds exact too, while the YAML reader rounds a long decimal bound to a float; the
   sentences were narrowed and every sentence of the "Checkers" section re-checked against the code.
-- **How I validated:** `make verify`; 31 mutations of the checkers and the loader (bool vs number, both
+  The fourth audit passed, and still found four places that cut a quoted value with no test, a
+  mutation count left stale in this entry, and a typographic minus (`−5`) read as 5. Every quoting
+  site now has its own test, the count is no longer repeated here, and `−5` reads as -5.
+- **How I validated:** `make verify`; mutations of the checkers and the loader (bool vs number, both
   range bounds, first vs last number, case folding, Unicode normalization, missing fields, code
   fences, `NaN`, repeated JSON keys, option validation, the output type guard, cut reasons, exact decimals) each
   turned a test red; the reasons quoted in
