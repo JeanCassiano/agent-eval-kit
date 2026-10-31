@@ -24,6 +24,7 @@ Environment is managed by uv (Python from `.python-version`, dependencies locked
 - `make lint` / `make format` — ruff check + format (`sensors/` and `tests/test_sensors.py` are excluded:
   they are copied from `indigotech/br-taqtile-observability` and kept diffable with it)
 - `make verify` — the CI gates (`.github/workflows/ci.yml`); run it before pushing
+- `make mutate` — mutation tests (mutmut) over `src/`; `MODULE=cases` limits them to one module
 
 When a new target lands (observability stack, demo), list it here.
 

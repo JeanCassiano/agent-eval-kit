@@ -25,5 +25,11 @@ format: ## Corrige estilo e formatação (ruff)
 	$(UV) run ruff check --fix .
 	$(UV) run ruff format .
 
+.PHONY: mutate
+mutate: ## Testes de mutação (mutmut) em src/; MODULE=cases restringe a um módulo
+	rm -rf mutants
+	PYTHONDONTWRITEBYTECODE=1 $(UV) run mutmut run $(if $(MODULE),"agent_eval_kit.$(MODULE).*")
+	$(UV) run mutmut results
+
 .PHONY: verify
 verify: lint test ## Gates do CI: lint e testes

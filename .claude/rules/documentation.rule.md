@@ -38,9 +38,16 @@ Re-read every line you touched against the final diff before closing.
 - Cite the symbol or the config name, not the line number: `metrics.percentile`, `check.type`.
 - A published count is a measurement: re-run the command or the query at the final head and paste its
   answer, never a recollection. A number measured with a real model names the model and the date;
-  a number from the mock names the seed.
+  a number from the mock names the seed. A count that the next push can change (tests passed,
+  mutations run) lives only in the PR body; a permanent doc describes the check without the number.
 - Never state a guarantee the code does not enforce. Grep the owner you name; if a guard covers only
   part of the claim, narrow the claim.
+- **A universal claim is a claim about a population.** A sentence with *every*, *each*, *all*, *never*,
+  *always*, *only* or *exactly* is true only if it holds for every member. List the members with a
+  command (`grep` the call sites, the code paths, the examples the sentence cites) and write "N of N"
+  in the trace. Walk the path the reader uses: a claim about a YAML suite is checked by loading one,
+  not by calling the checker with a Python value. When an audit finding names one member, sweep the
+  whole population before the push; the finding is an example of the class, not its list.
 - **Docs written ahead of the code.** A component that does not exist yet (a gate, a target, the mock,
   a report) appears only as intent ("is meant to", "once it lands"), never in the present tense. Before
   saying a kind of claim was removed, grep the whole file for the concept, not only the sentence you
