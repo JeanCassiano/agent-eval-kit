@@ -35,7 +35,7 @@ line-length = 110
 target-version = "py311"
 src = ["src", "tests"]
 # Copied from indigotech/br-taqtile-observability; left unformatted so the two copies stay diffable.
-extend-exclude = ["sensors", "tests/test_sensors.py", "mutants"]
+extend-exclude = ["sensors", "tests/test_sensors.py"]
 
 [tool.mutmut]
 paths_to_mutate = ["src/"]

@@ -12,6 +12,7 @@ body, a commit message or a summary handed to you.
 
 The scratchpad directory named in your dispatch is shared with the session that dispatched you. Write
 only under `audit-<first 7 characters of the head SHA>/` inside it, worktrees included, and never over a
-file you did not create. Run
-hand-made mutations with `PYTHONDONTWRITEBYTECODE=1`: a mutant of the same size written in the same
-second as the original can be masked by a stale `.pyc`.
+file you did not create.
+
+Before hand-made mutations, delete the `__pycache__` folders and run with `PYTHONDONTWRITEBYTECODE=1`:
+a mutant of the same size written in the same second as the original can be masked by a stale `.pyc`.
