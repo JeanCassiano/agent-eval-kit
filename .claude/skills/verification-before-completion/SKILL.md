@@ -35,11 +35,12 @@ List what changed with `git diff --name-only --no-renames origin/main...HEAD` pl
      says why they moved and by how much;
    - code under `src/` changed → `make mutate MODULE=<module>`, and settle every survivor in a changed
      function: a test that kills it, or a line in the PR naming it equivalent or cosmetic (reason
-     wording no test pins). Mutmut 3.3.1 cannot kill a mutant in a function that runs only at
-     import time, such as a registry filled when the module loads: those survive even when they would
-     break every test.
-     It replaces a call's arguments but keeps the call, so a value left unwrapped is not its kind of
-     mutant: the sites of a universal claim are still listed (`.claude/rules/documentation.rule.md`);
+     wording no test pins). A function that runs only at import time, such as a registry filled when
+     the module loads, keeps its mutants alive under tests that only import the module; a test that
+     reloads it (`importlib.reload`) and checks what it built can kill them. Mutmut 3.3.1 did not
+     unwrap a call (`wrap(x)` → `x`) in any of the 124 mutants it made of a module that wraps every
+     quoted value, so a value left unwrapped is still found by listing the sites of the claim
+     (`.claude/rules/documentation.rule.md`);
    - OTel export, the collector, Prometheus, Tempo or the compose changed → `make verify VERIFY_E2E=1`:
      a run reaches the stack and the metric and the trace are queryable;
    - the Docker image or the demo path changed → `docker compose run --rm eval demo` on a clean
